@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=12';
-import { ZONES, dist } from './data.js?v=12';
-import { Renderer } from './render.js?v=12';
+import * as THREE from './three.module.min.js?v=14';
+import { ZONES, dist } from './data.js?v=14';
+import { Renderer } from './render.js?v=14';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
@@ -573,11 +573,13 @@ export class Renderer3D {
     const h = game.hero;
     h.bob = !!game.isMoving;
     const heroDef = game.def;
-    if (!this.heroKey || this.heroKey !== heroDef.id) {
+    const scenery = this.assets.scenery;
+    const sceneryReady = scenery && scenery.complete && scenery.naturalWidth > 0;
+    if (sceneryReady && (!this.heroKey || this.heroKey !== heroDef.id)) {
       this.heroTex = heroTexture(heroDef, this.assets);
       this.heroKey = heroDef.id;
     }
-    const heroActor = this._syncActor(h, this.heroTex, HERO_H, HERO_H, zone, time);
+    if (this.heroTex) this._syncActor(h, this.heroTex, HERO_H, HERO_H, zone, time);
     keep.add(h);
 
     // shield bubble
@@ -599,9 +601,13 @@ export class Renderer3D {
       if (dist(e, h) > 2400) continue;
       const size = (e.boss ? 285 : e.elite ? 170 : 130);
       const key = 'b' + e.type;
+      const beasts = this.assets.beasts;
+      // never cache a texture built from an image that has not decoded yet: the
+      // empty upload would stick and the creature would stay invisible forever
+      if (!beasts || !beasts.complete || !beasts.naturalWidth) continue;
       let tex = this._beastTex && this._beastTex.get(key);
       if (!tex) {
-        tex = cellTexture(this.assets.beasts, e.type, ATLAS_COLS, ATLAS_ROWS);
+        tex = cellTexture(beasts, e.type, ATLAS_COLS, ATLAS_ROWS);
         if (!this._beastTex) this._beastTex = new Map();
         this._beastTex.set(key, tex);
       }
