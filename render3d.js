@@ -70,7 +70,37 @@ function glowTexture() {
   return t;
 }
 
-// hero = body cell from the scenery atlas + the real photo clipped into the head
+// soft elliptical ground shadow, stretched away from the sun
+function shadowTexture() {
+  const s = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(s / 2, s / 2, s * 0.05, s / 2, s / 2, s / 2);
+  g.addColorStop(0, 'rgba(0,0,0,0.62)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.34)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// one white rounded bar texture, tinted per material
+function barTexture() {
+  const w = 64, h = 10, cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#fff';
+  c.fillRect(1, 2, w - 2, h - 4);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// sun direction used for both the light and the projected shadows
+const SUN_DIR = new THREE.Vector3(0.42, 0.82, 0.3).normalize();
+
 function heroTexture(def, assets) {
   const S = 256, k = S / HERO_H;
   const cv = document.createElement('canvas');
@@ -124,6 +154,12 @@ export class Renderer3D {
       [15, -60, 300, 0.7],   // broken pillar
     ];
     this.glow = glowTexture();
+    this.shadowTex = shadowTexture();
+    this.barTex = barTexture();
+    this.textCache = new Map();
+    this.bars = new Map();
+    this.flares = [];
+    this.bolts = [];
 
     this.renderer = new THREE.WebGLRenderer({
       canvas, antialias: false, alpha: false, powerPreference: 'high-performance',
@@ -205,11 +241,13 @@ export class Renderer3D {
     return s;
   }
 
-  _blob(size) {
-    const g = new THREE.CircleGeometry(size, 20);
-    const m = new THREE.MeshBasicMaterial({ color: 0x05100c, transparent: true, opacity: 0.38, depthWrite: false });
-    const mesh = new THREE.Mesh(g, m);
+  _shadowQuad(w) {
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.shadowTex, transparent: true, depthWrite: false, opacity: 0.85,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
     mesh.rotation.x = -Math.PI / 2;
+    mesh.scale.set(w * 1.15, w * 0.62, 1);
     return mesh;
   }
 
@@ -283,16 +321,22 @@ export class Renderer3D {
     let a = this.actors.get(entity);
     if (!a) {
       const sprite = this._sprite(tex, w, h, 0.075);
-      const shadow = this._blob(w * 0.28);
+      const shadow = this._shadowQuad(w);
       this.scene.add(sprite, shadow);
       a = { sprite, shadow, w, h };
       this.actors.set(entity, a);
     }
-    if (a.w !== w) { a.sprite.scale.set(w, h, 1); a.shadow.geometry.dispose(); a.shadow.geometry = new THREE.CircleGeometry(w * 0.28, 20); a.w = w; a.h = h; }
+    if (a.w !== w) {
+      a.sprite.scale.set(w, h, 1);
+      a.shadow.scale.set(w * 1.15, w * 0.62, 1);
+      a.w = w; a.h = h;
+    }
     const gy = heightAt(entity.x, entity.y, zone);
     const bob = entity.bob ? Math.sin(time * 11) * 2.5 : 0;
     a.sprite.position.set(entity.x, gy + bob, entity.y);
-    a.shadow.position.set(entity.x, gy + 1.2, entity.y);
+    // shadow slides away from the sun and stretches as the body gets taller
+    const reach = h * 0.34;
+    a.shadow.position.set(entity.x - SUN_DIR.x * reach, gy + 1.5, entity.y - SUN_DIR.z * reach);
     a.sprite.visible = true; a.shadow.visible = true;
     return a;
   }
@@ -305,6 +349,187 @@ export class Renderer3D {
       a.shadow.geometry.dispose();
       a.shadow.material.dispose();
       this.actors.delete(entity);
+    }
+  }
+
+  // one canvas texture per distinct string, shared by every floater using it
+  _textTexture(text, color, crit) {
+    const key = `${text}|${color}|${crit ? 1 : 0}`;
+    const hit = this.textCache.get(key);
+    if (hit) return hit;
+    const font = crit ? 'bold 52px system-ui,sans-serif' : 'bold 42px system-ui,sans-serif';
+    const probe = document.createElement('canvas').getContext('2d');
+    probe.font = font;
+    const w = Math.ceil(probe.measureText(text).width) + 24;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = 72;
+    const c = cv.getContext('2d');
+    c.font = font;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.lineWidth = 7;
+    c.strokeStyle = 'rgba(4,10,8,0.85)';
+    c.strokeText(text, w / 2, 38);
+    c.fillStyle = color;
+    c.fillText(text, w / 2, 38);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (this.textCache.size > 300) this.textCache.clear();
+    this.textCache.set(key, tex);
+    return tex;
+  }
+
+  // hp bars, damage numbers, ground rings, impact flares, lightning
+  _fx(game, zone, time) {
+    const fx = game.effects || [];
+
+    // ---- ground rings (telegraphs and area bursts) ----
+    const rings = fx.filter(e => e.r > 0);
+    while (this.rings.length < rings.length) {
+      const m = new THREE.Mesh(
+        new THREE.RingGeometry(0.82, 1, 40),
+        new THREE.MeshBasicMaterial({ color: 0xc9a15f, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
+      );
+      m.rotation.x = -Math.PI / 2;
+      this.scene.add(m);
+      this.rings.push(m);
+    }
+    for (let i = 0; i < this.rings.length; i++) {
+      const e = rings[i], m = this.rings[i];
+      if (!e) { m.visible = false; continue; }
+      const life = Math.max(0, Math.min(1, (e.ttl || 1) / (e.max || 1)));
+      m.visible = true;
+      m.position.set(e.x, heightAt(e.x, e.y, zone) + 2, e.y);
+      m.scale.set(e.r, e.r, 1);
+      m.material.color.set(e.color || (e.kind === 'guard' ? '#b7d7d0' : e.kind === 'warning' ? '#d0644f' : '#d08a63'));
+      // big AoE rings stay readable by fading with radius
+      const fade = Math.min(1, 260 / Math.max(60, e.r));
+      m.material.opacity = (e.kind === 'warning' ? 0.2 + (1 - life) * 0.5 : 0.15 + life * 0.55) * (0.35 + 0.65 * fade);
+    }
+
+    // ---- impact flares ----
+    while (this.flares.length < fx.length) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this.glow, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+      }));
+      this.scene.add(s);
+      this.flares.push(s);
+    }
+    for (let i = 0; i < this.flares.length; i++) {
+      const e = fx[i], s = this.flares[i];
+      if (!e) { s.visible = false; continue; }
+      const life = Math.max(0, Math.min(1, (e.ttl || 1) / (e.max || 1)));
+      const size = Math.max(44, Math.min(170, (e.r || 80) * 0.55)) * (1.25 - life * 0.4);
+      s.visible = true;
+      s.position.set(e.x, heightAt(e.x, e.y, zone) + (e.kind === 'slash' ? 75 : 48), e.y);
+      s.scale.set(size, size, 1);
+      s.material.color.set(e.color || '#e8c98f');
+      s.material.opacity = life * 0.5;
+    }
+
+    // ---- lightning bolts ----
+    const bolts = fx.filter(e => e.kind === 'lightning');
+    while (this.bolts.length < bolts.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 2 * 3), 3));
+      const line = new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+        color: 0xc7ddff, transparent: true, opacity: 0.9, depthWrite: false,
+      }));
+      line.frustumCulled = false;
+      this.scene.add(line);
+      this.bolts.push(line);
+    }
+    for (let i = 0; i < this.bolts.length; i++) {
+      const e = bolts[i], line = this.bolts[i];
+      if (!e) { line.visible = false; continue; }
+      const gy = heightAt(e.x, e.y, zone);
+      const pos = line.geometry.attributes.position;
+      const top = gy + 620;
+      let px = e.x + (i % 3 - 1) * 40, py = e.y;
+      for (let s = 0; s < 8; s++) {
+        const t0 = s / 8, t1 = (s + 1) / 8;
+        pos.setXYZ(s * 2, px, top - (top - gy) * t0, py);
+        px = e.x + Math.sin(time * 40 + s * 2.1 + i) * 46 * (1 - t1);
+        py = e.y + Math.cos(time * 37 + s * 1.7 + i) * 46 * (1 - t1);
+        pos.setXYZ(s * 2 + 1, px, top - (top - gy) * t1, py);
+      }
+      pos.needsUpdate = true;
+      line.visible = true;
+      line.material.opacity = Math.min(1, (e.ttl || 0) * 2.2);
+    }
+
+    // ---- creature hp bars ----
+    const seen = new Set();
+    for (const e of game.enemies) {
+      if (!e.alive) continue;
+      if (dist(e, game.hero) > 2400) continue;
+      if (!(e.hp < e.maxHp || e.boss || e.elite)) continue;
+      seen.add(e);
+      const w = e.boss ? 200 : e.elite ? 138 : 100;
+      const bodyH = (e.boss ? 285 : e.elite ? 170 : 130) * 0.94;
+      let b = this.bars.get(e);
+      if (!b) {
+        const bg = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: this.barTex, color: 0x08120f, transparent: true, depthWrite: false, depthTest: false, opacity: 0.8,
+        }));
+        const fill = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: this.barTex, color: 0xc4694f, transparent: true, depthWrite: false, depthTest: false,
+        }));
+        fill.center.set(0, 0.5);
+        this.scene.add(bg, fill);
+        b = { bg, fill };
+        this.bars.set(e, b);
+      }
+      const gy = heightAt(e.x, e.y, zone);
+      const ratio = Math.max(0, Math.min(1, e.hp / e.maxHp));
+      b.bg.scale.set(w, 14, 1);
+      b.bg.position.set(e.x, gy + bodyH + 30, e.y);
+      b.fill.scale.set(Math.max(0.001, w * ratio), 9, 1);
+      b.fill.position.set(e.x - w / 2, gy + bodyH + 30, e.y);
+      b.fill.material.color.set(e.boss ? 0xd2ac69 : e.hp / e.maxHp < 0.3 ? 0xb8483a : 0xc4694f);
+      b.bg.visible = true; b.fill.visible = true;
+    }
+    for (const [ent, b] of this.bars) {
+      if (seen.has(ent)) continue;
+      this.scene.remove(b.bg, b.fill);
+      b.bg.material.dispose();
+      b.fill.material.dispose();
+      this.bars.delete(ent);
+    }
+
+    // ---- floating damage numbers ----
+    if (!this.floats) this.floats = new Map();
+    const alive = new Set();
+    for (const f of (game.floaters || [])) {
+      if (!f) continue;
+      alive.add(f);
+      let s = this.floats.get(f);
+      if (!s) {
+        const tex = this._textTexture(String(f.text), f.color || '#e8e2cb', !!f.crit);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: tex, transparent: true, depthWrite: false, depthTest: false,
+        }));
+        sprite.userData.aspect = tex.image.width / tex.image.height;
+        // stable per-number offset so simultaneous hits stay readable
+        sprite.userData.dx = (Math.random() - 0.5) * 54;
+        sprite.userData.dz = (Math.random() - 0.5) * 34;
+        this.scene.add(sprite);
+        this.floats.set(f, sprite);
+        s = sprite;
+      }
+      const k = f.crit ? 1.5 : 1.1;
+      const ttl = Math.max(0, f.ttl ?? 0.85);
+      const rise = (1 - ttl / 0.85) * 120;
+      s.scale.set(40 * k * s.userData.aspect, 40 * k, 1);
+      s.position.set(f.x + s.userData.dx, heightAt(f.x, f.y, zone) + (f.z || 65) + rise, f.y + s.userData.dz);
+      s.material.opacity = Math.min(1, ttl / 0.45);
+      s.visible = true;
+    }
+    for (const [f, s] of this.floats) {
+      if (alive.has(f)) continue;
+      this.scene.remove(s);
+      s.material.dispose();
+      this.floats.delete(f);
     }
   }
 
@@ -397,28 +622,8 @@ export class Renderer3D {
       s.position.set(p.x, heightAt(p.x, p.y, zone) + 42, p.y);
     }
 
-    // ground telegraphs / area effects
-    const rings = (game.effects || []).filter(e => e.r && (e.kind === 'warning' || e.kind === 'guard' || e.kind === 'meteor'));
-    while (this.rings.length < rings.length) {
-      const m = new THREE.Mesh(
-        new THREE.RingGeometry(0.78, 1, 40),
-        new THREE.MeshBasicMaterial({ color: 0xc9a15f, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
-      );
-      m.rotation.x = -Math.PI / 2;
-      this.scene.add(m);
-      this.rings.push(m);
-    }
-    for (let i = 0; i < this.rings.length; i++) {
-      const e = rings[i], m = this.rings[i];
-      if (!e) { m.visible = false; continue; }
-      m.visible = true;
-      m.position.set(e.x, heightAt(e.x, e.y, zone) + 2, e.y);
-      m.scale.set(e.r, e.r, 1);
-      m.material.color.set(e.kind === 'guard' ? 0xb7d7d0 : 0xd08a63);
-      m.material.opacity = 0.28 + 0.25 * Math.max(0, Math.min(1, (e.ttl || 1)));
-    }
-
-    this._recycle(keep);
+    this._fx(game, zone, time);
+this._recycle(keep);
 
     // camera follows the hero; first frame snaps instead of drifting in
     const gy = heightAt(h.x, h.y, zone);
