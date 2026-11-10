@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=6';
-import { ZONES, dist } from './data.js?v=6';
-import { Renderer } from './render.js?v=6';
+import * as THREE from './three.module.min.js?v=7';
+import { ZONES, dist } from './data.js?v=7';
+import { Renderer } from './render.js?v=7';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
@@ -133,6 +133,21 @@ function heroTexture(def, assets) {
   return tex;
 }
 
+// A visible strip so a rendering problem is never a silent black screen.
+function banner(msg, hold = 0) {
+  let el = document.getElementById('renderBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'renderBanner';
+    el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#5c201ae6;color:#ffe8d2;'
+      + 'font:12px/1.6 system-ui,sans-serif;padding:5px 10px;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  clearTimeout(banner._t);
+  if (hold) banner._t = setTimeout(() => { const n = document.getElementById('renderBanner'); if (n) n.remove(); }, hold);
+}
+
 export class Renderer3D {
   constructor(canvas, assets) {
     this.canvas = canvas;
@@ -165,8 +180,23 @@ export class Renderer3D {
       canvas, antialias: false, alpha: false, powerPreference: 'high-performance',
     });
     window.__renderer3d = this;   // handy for the diagnostics harness
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.25));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // Phones drop the GL context under memory/thermal pressure. Without this the
+    // canvas simply stays black, so swallow the loss and repaint when it returns.
+    this.contextLost = false;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      window.__renderMode = '3d-context-lost';
+      banner('显卡上下文丢失（手机内存紧张时常见），正在自动恢复…');
+    }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      window.__renderMode = '3d';
+      banner('渲染已恢复', 2200);
+    }, false);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(48, 1, 2, 12000);
@@ -304,7 +334,7 @@ export class Renderer3D {
 
     // scattered scenery, deterministic per zone
     const rnd = mulberry32(1013 + zone.id * 77);
-    for (let i = 0; i < 320; i++) {
+    for (let i = 0; i < 220; i++) {
       const x = zone.x + rnd() * ZONE, z = zone.y + rnd() * ZONE;
       if (dist({ x, y: z }, { x: zone.camp[0], y: zone.camp[1] }) < 340) continue;
       if (dist({ x, y: z }, { x: zone.boss[0], y: zone.boss[1] }) < 380) continue;
@@ -534,6 +564,7 @@ export class Renderer3D {
   }
 
   draw(game, time) {
+    if (this.contextLost) return;   // wait for webglcontextrestored
     this.resize();
     const zone = ZONES[game.zone.id] || game.zone;
     if (this.zoneId !== zone.id) { this._buildZone(zone, game); this.zoneId = zone.id; }
@@ -645,13 +676,52 @@ this._recycle(keep);
 // app.js asks for a renderer; keep the 2D one as a safety net for devices
 // without usable WebGL.
 export function makeRenderer(canvas, assets) {
+  // Facade so a rendering failure degrades to the 2D renderer instead of
+  // leaving the player on a black canvas.
+  const facade = {
+    inner: null,
+    fails: 0,
+    mode: '3d',
+    draw(game, time) {
+      if (!this.inner) return;
+      try {
+        this.inner.draw(game, time);
+        this.fails = 0;
+      } catch (err) {
+        this.fails++;
+        console.error('[3d] draw failed', err);
+        if (this.fails === 1) banner('3D 渲染异常：' + (err && err.message ? err.message : err) + '　已切换到 2D');
+        if (this.fails >= 2) this.to2d();
+      }
+    },
+    to2d() {
+      if (this.mode === '2d' || !canvas.parentNode) return;
+      try {
+        // the GL canvas cannot hand out a 2d context, so swap in a fresh one
+        const fresh = canvas.cloneNode(false);
+        canvas.parentNode.replaceChild(fresh, canvas);
+        this.inner = new Renderer(fresh, assets);
+        this.mode = '2d';
+        window.__renderMode = '2d-fallback';
+        this.fails = 0;
+        banner('已自动切换到 2D 渲染，刷新页面可再次尝试 3D', 6000);
+      } catch (e) {
+        console.error('[3d] fallback failed', e);
+        this.inner = null;
+        banner('渲染已停止，请刷新页面');
+      }
+    },
+  };
+
   try {
-    const r = new Renderer3D(canvas, assets);
+    facade.inner = new Renderer3D(canvas, assets);
     window.__renderMode = '3d';
-    return r;
   } catch (err) {
     console.warn('3D unavailable, using 2D renderer:', err);
+    facade.inner = new Renderer(canvas, assets);
+    facade.mode = '2d';
     window.__renderMode = '2d-fallback';
-    return new Renderer(canvas, assets);
   }
+  window.__rendererFacade = facade;
+  return facade;
 }
