@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>素材自检</title>
+<style>body{margin:0;padding:12px;background:#0b1413;color:#d8e2da;font:13px/1.5 ui-monospace,monospace}
+h1{font:16px sans-serif;margin:0 0 10px;color:#d2b781}pre{white-space:pre-wrap;margin:0 0 12px}
+canvas{border:1px solid #2a3a36;width:100%;height:auto}</style></head><body>
+<h1>素材自检 · 山海五侠</h1><pre id="out">检查中…</pre><canvas id="cv" width="600" height="200"></canvas>
+<script>
+(async () => {
+  const L = [], log = (...a) => { L.push(a.join(' ')); document.getElementById('out').textContent = L.join('\n'); };
+  log('UA:', navigator.userAgent);
+  log('viewport:', innerWidth + 'x' + innerHeight, '| dpr:', devicePixelRatio, '| deviceMemory:', navigator.deviceMemory || '?');
+  log('protocol:', location.protocol);
+  const files = ["zhangke.webp","quanquan.webp","dongdong.webp","weiwei.webp","qiangzi.webp","beasts.webp","scenery.webp","title-world.webp"];
+  let okCount = 0;
+  for (const f of files) {
+    const url = 'assets/' + f + '?diag=' + Date.now();
+    let fetched = 'n/a', bytes = 0;
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      const b = await r.arrayBuffer();
+      fetched = r.status; bytes = b.byteLength;
+    } catch (e) { fetched = 'ERR ' + e.message; }
+    const img = new Image();
+    const decoded = await new Promise(res => { img.onload = () => res(true); img.onerror = () => res(false); img.src = url; });
+    if (decoded) okCount++;
+    log((decoded ? 'OK  ' : 'FAIL') + ' ' + f.padEnd(16) + ' http=' + fetched + ' ' + (bytes / 1024).toFixed(0) + 'KB' +
+        (decoded ? ' decoded=' + img.naturalWidth + 'x' + img.naturalHeight : ' <-- 解码失败'));
+    if (decoded && f === 'beasts.webp') {
+      const c = document.getElementById('cv').getContext('2d');
+      c.drawImage(img, 0, 0, 1024, 682, 0, 0, 600, 200);
+      const d = c.getImageData(0, 0, 600, 200).data;
+      let painted = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) painted++;
+      log('  canvas 绘制测试: ' + painted + ' 个非透明像素' + (painted > 1000 ? ' （正常）' : ' （异常，画布可能被限制）'));
+    }
+  }
+  log('');
+  log('结果: ' + okCount + '/' + files.length + ' 张素材解码成功');
+  if (okCount < files.length) log('有素材失败 —— 请把这张截图发给我');
+})();
+</script></body></html>
