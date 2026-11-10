@@ -1,8 +1,8 @@
-import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=10';
-import {Game,createSave,validateSave} from './engine.js?v=10';
-import {loadAssets,portrait,atlas,drawMap} from './render.js?v=10';
-import {makeRenderer} from './render3d.js?v=10';
-import {chooseProgress} from './sync.js?v=10';
+import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=11';
+import {Game,createSave,validateSave} from './engine.js?v=11';
+import {loadAssets,portrait,atlas,drawMap} from './render.js?v=11';
+import {makeRenderer} from './render3d.js?v=11';
+import {chooseProgress} from './sync.js?v=11';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const input={x:0,y:0,attack:false},keys=new Set();let game=null,assets={},renderer,mode='title',save=createSave(),user=null,revision=0,selected=0,authMode='login',saving=null,saveAgain=false,cloudBlocked=false,lastStamp=0,hudClock=0,autoAttack=false,pausedByVisibility=false,goal=null,audio=null,joystickPointer=null;
 const cacheKey=()=>`shanhai-v1:${user?.id||'guest'}`;
@@ -10,7 +10,61 @@ function readLocal(key){try{const raw=localStorage.getItem(key);return raw?valid
 function writeLocal(){try{const key=cacheKey(),old=localStorage.getItem(key);if(old)localStorage.setItem(key+':backup',old);localStorage.setItem(key,JSON.stringify(save));if(user&&!cloudBlocked)localStorage.setItem(key+':meta',JSON.stringify({dirty:true,revision}));return true;}catch{toast('本机保存失败，请在设置中导出存档');return false;}}
 function loadAccount(data){user=data.user;let meta;try{meta=JSON.parse(localStorage.getItem(cacheKey()+':meta')||'null');}catch{}const choice=chooseProgress(validateSave(data.save),data.revision,readLocal(cacheKey()),meta);save=choice.save;revision=choice.revision;cloudBlocked=choice.blocked;if(choice.recovered)toast(choice.blocked?'已保留未同步本机进度，请先导出，再重新登录处理冲突':'已恢复尚未同步的本机进度');}
 function toast(text,type=''){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=text;$('toasts').append(el);while($('toasts').children.length>3)$('toasts').firstChild.remove();setTimeout(()=>el.remove(),3600);}
-async function api(path,method='GET',data){const r=await fetch(`/api/${path}`,{method,credentials:'same-origin',headers:{'Content-Type':'application/json'},...(data?{body:JSON.stringify(data)}:{})});const body=await r.json();if(!r.ok){const e=Error(body.error||'网络暂时不可用');e.status=r.status;throw e;}return body;}
+const ACCT_KEY='shanhai-local:accounts',SESS_KEY='shanhai-local:session';
+function localAccts(){try{return JSON.parse(localStorage.getItem(ACCT_KEY)||'{}')}catch{return{}}}
+function saveAccts(v){try{localStorage.setItem(ACCT_KEY,JSON.stringify(v))}catch{}}
+function localSession(){try{return JSON.parse(localStorage.getItem(SESS_KEY)||'null')}catch{return null}}
+function setSession(v){try{if(v)localStorage.setItem(SESS_KEY,JSON.stringify(v));else localStorage.removeItem(SESS_KEY)}catch{}}
+function hex(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return [...a].map(b=>b.toString(16).padStart(2,'0')).join('')}
+async function pbkdf2(pw,saltHex,iter){if(!(crypto&&crypto.subtle)){throw fail(501,'这个浏览器不支持安全加密，无法保存账号；可以直接用游客模式玩')}
+  const enc=new TextEncoder();
+  const key=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);
+  const salt=Uint8Array.from(saltHex.match(/../g).map(h=>parseInt(h,16)));
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:iter||120000,hash:'SHA-256'},key,256);
+  return [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+const revGet=id=>Number(localStorage.getItem('shanhai-local:rev:'+id)||0);
+const revSet=(id,v)=>{try{localStorage.setItem('shanhai-local:rev:'+id,String(v))}catch{}};
+const saveGet=id=>{try{const raw=localStorage.getItem('shanhai-v1:'+id);return raw?validateSave(JSON.parse(raw)):null}catch{return null}};
+const fail=(status,msg)=>{const e=Error(msg);e.status=status;return e};
+async function apiLocal(path,method,data){
+  data=data||{};
+  const accts=localAccts();
+  const sess=localSession();
+  const cur=sess&&accts[sess.name]?accts[sess.name]:null;
+  if(path==='me'){
+    if(!cur)throw fail(401,'未登录');
+    return {user:{id:cur.id,name:cur.name},save:saveGet(cur.id)||createSave(),revision:revGet(cur.id)};
+  }
+  if(path==='register'){
+    const name=String(data.username||'').trim(),pw=String(data.password||'');
+    if(name.length<2||name.length>20)throw fail(400,'用户名需 2–20 位');
+    if(pw.length<8||pw.length>72)throw fail(400,'密码需 8–72 位');
+    if(accts[name])throw fail(409,'这个用户名已被占用');
+    const salt=hex(16),hash=await pbkdf2(pw,salt),id='u'+hex(4);
+    accts[name]={id,name,salt,hash,created:Date.now()};
+    saveAccts(accts);setSession({name});revSet(id,0);
+    return {user:{id,name},save:createSave(),revision:0};
+  }
+  if(path==='login'){
+    const name=String(data.username||'').trim(),pw=String(data.password||'');
+    const rec=accts[name];
+    if(!rec)throw fail(404,'这台设备上没有这个账号');
+    if(await pbkdf2(pw,rec.salt)!==rec.hash)throw fail(403,'密码不对');
+    setSession({name});
+    return {user:{id:rec.id,name:rec.name},save:saveGet(rec.id)||createSave(),revision:revGet(rec.id)};
+  }
+  if(path==='logout'){setSession(null);return{ok:true}}
+  if(path==='save'){
+    if(!cur)throw fail(401,'未登录');
+    const rev=revGet(cur.id);
+    if(typeof data.revision==='number'&&data.revision!==rev)throw fail(409,'进度已在别处更新，请重新登录');
+    try{localStorage.setItem('shanhai-v1:'+cur.id,JSON.stringify(validateSave(data.save)))}catch{throw fail(500,'本机存储已满')}
+    revSet(cur.id,rev+1);
+    return {revision:rev+1};
+  }
+  throw fail(404,'未知接口');
+}
+async function api(path,method='GET',data){return apiLocal(path,method||'GET',data);}
 function accountText(){$('accountBtn').textContent=user?`${user.name} · 已登录`:(apiAvailable?'注册 / 登录':'本机存档');$('titleProgress').textContent=`${user?'账号进度':'本机游历'} · ${HEROES[save.selected].name} Lv.${save.heroes[save.selected].level} · 已踏访 ${save.discovered.filter(Boolean).length}/8 区域`;}
 async function saveNow(silent=false){writeLocal();if(!user){$('syncState').textContent='本机进度已保存';if(!silent)toast('本机进度已保存；登录账号后可保存至服务器');return true;}if(cloudBlocked){if(!silent)toast('云端进度有冲突，请先导出，再重新登录');return false;}if(saving){saveAgain=true;return saving;}const owner=user.id,payload=JSON.parse(JSON.stringify(save)),rev=revision;$('syncState').textContent='正在保存…';saving=(async()=>{try{const r=await api('save','PUT',{save:payload,revision:rev,userId:owner});if(user?.id===owner){revision=r.revision;try{const key=cacheKey();localStorage.setItem(key+':meta',JSON.stringify({revision,dirty:localStorage.getItem(key)!==JSON.stringify(payload)}));}catch{}$('syncState').textContent='账号进度已保存';}if(!silent)toast('账号进度已保存');return true;}catch(e){if([401,403,409].includes(e.status))cloudBlocked=true;$('syncState').textContent='本机已保存 · 云端待同步';if(!silent||[403,409].includes(e.status))toast(e.message);return false;}finally{saving=null;if(saveAgain&&user?.id===owner&&!cloudBlocked){saveAgain=false;queueMicrotask(()=>saveNow(true));}}})();return saving;}
 function sound(freq=360){if(save.settings.volume<=0)return;try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='triangle';o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.5,audio.currentTime+.14);g.gain.setValueAtTime(save.settings.volume*.07,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.2);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.21);}catch{}}
@@ -34,7 +88,7 @@ function exportSave(){writeLocal();const blob=new Blob([JSON.stringify(save,null
 $('modalBody').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b||!game)return;if(b.dataset.equip){game.equip(b.dataset.equip);$('modal').close();bagMenu();saveNow(true);}if(b.dataset.upgrade){game.upgrade(b.dataset.upgrade);$('modal').close();heroMenu();saveNow(true);}if(b.dataset.quest!==undefined){game.claimQuest(Number(b.dataset.quest));$('modal').close();questMenu();saveNow(true);}if(b.dataset.travel!==undefined){const z=ZONES[Number(b.dataset.travel)];if(save.discovered[z.id]){game.teleport(z.id);saveNow(true);}else{goal=z;toast(`沿古道前往 ${z.name}，留意上方方向指引`);}$('modal').close();}switch(b.dataset.action){case'salvage':game.salvage();$('modal').close();bagMenu();saveNow(true);break;case'salvageBlue':salvageQuality(2);$('modal').close();bagMenu();saveNow(true);break;case'bounty':game.claimBounty();$('modal').close();questMenu();saveNow(true);break;case'export':exportSave();break;case'import':$('importFile').click();break;case'return':game.teleport(game.zone.id);$('modal').close();saveNow(true);break;case'switch':if(!game.isCamp()){toast('请先回营地再切换角色');break;}await saveNow(true);$('modal').close();selected=save.selected;renderSelection();showMode('select');break;case'help':$('modal').close();helpMenu();break;case'login':$('modal').close();openAuth();break;case'logout':{await saveNow(true);if(saving)await saving;try{await api('logout','POST',{});}catch(e){toast(e.message);break;}user=null;revision=0;cloudBlocked=false;save=readLocal('shanhai-v1:guest')||createSave();game=null;$('modal').close();showMode('title');toast('已退出账号');break;}}});
 $('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>250000)throw Error('存档文件过大');const next=validateSave(JSON.parse(await f.text()));try{localStorage.setItem(cacheKey()+':before-import',JSON.stringify(save));}catch{}save=next;if(game){selected=save.selected;game=new Game(save,selected);portrait($('hudFace'),game.def,assets);$('heroName').textContent=game.def.name;$('modal').close();startGame();}await saveNow();accountText();toast('存档已导入，旧进度已保留本机备份');}catch(err){toast(`导入失败：${err.message}`);}e.target.value='';});
 let apiAvailable=false;
-function openAuth(){if(location.protocol==='file:'||!apiAvailable){toast('网页版进度保存在本机；注册登录需要联网服务器');return;}releaseInput();$('authError').textContent='';$('authDialog').showModal();}
+function openAuth(){if(location.protocol==='file:'){toast('单文件离线版不支持多账号，请用网页版');return;}releaseInput();$('authError').textContent='';$('authDialog').showModal();}
 function authTab(next){authMode=next;$('loginTab').classList.toggle('active',next==='login');$('registerTab').classList.toggle('active',next==='register');$('authSubmit').textContent=next==='login'?'登 录':'注 册 并 登 录';$('password').autocomplete=next==='login'?'current-password':'new-password';$('authError').textContent='';}
 $('authForm').addEventListener('submit',async e=>{e.preventDefault();$('authSubmit').disabled=true;$('authError').textContent='';try{if(game)await saveNow(true);const data=await api(authMode,'POST',{username:$('username').value.trim(),password:$('password').value});loadAccount(data);game=null;selected=save.selected;writeLocal();$('authDialog').close();$('password').value='';showMode('title');toast(authMode==='register'?'账号已注册，启程吧':'欢迎回来，已读取账号进度');}catch(err){$('authError').textContent=err.status?err.message:'暂时连接不到账号服务，请检查网络；本机游历仍可使用。';}finally{$('authSubmit').disabled=false;}});
 $('accountBtn').addEventListener('click',()=>{if(user){openModal('我的账号',`<p class="muted">已登录：${esc(user.name)}。进入游戏后可在暂停设置中导出存档或退出账号。</p>`);}else openAuth();});$('loginTab').addEventListener('click',()=>authTab('login'));$('registerTab').addEventListener('click',()=>authTab('register'));$('authClose').addEventListener('click',()=>$('authDialog').close());$('modalClose').addEventListener('click',()=>$('modal').close());$('enterWorld').addEventListener('click',()=>{selected=save.selected;renderSelection();showMode('select');});$('selectionBack').addEventListener('click',()=>showMode('title'));$('startAdventure').addEventListener('click',startGame);$('titleHelp').addEventListener('click',helpMenu);
@@ -45,6 +99,6 @@ $('joystick').addEventListener('pointerdown',e=>{if(joystickPointer!==null)retur
 window.addEventListener('keydown',e=>{if(e.target.matches('input,select')||$('authDialog').open)return;if(mode!=='game')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys.add(e.key.toLowerCase());if(e.repeat)return;if(e.key==='Escape'){if($('modal').open)$('modal').close();else settingsMenu();return;}if($('modal').open)return;if(/^[1-5]$/.test(e.key))game.cast(Number(e.key)-1);if(e.key.toLowerCase()==='m')mapMenu();if(e.key.toLowerCase()==='b')bagMenu();});window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',releaseInput);window.addEventListener('resize',releaseInput);document.addEventListener('visibilitychange',()=>{pausedByVisibility=document.hidden;releaseInput();lastStamp=0;if(document.hidden)saveNow(true);});window.addEventListener('pagehide',()=>{writeLocal();if(user&&!cloudBlocked)fetch('/api/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({save,revision,userId:user.id}),keepalive:true}).catch(()=>{});});
 function frame(stamp){requestAnimationFrame(frame);if(!lastStamp)lastStamp=stamp;const dt=Math.min((stamp-lastStamp)/1000,.07);if(save.settings.quality==='low'&&stamp-lastStamp<32)return;lastStamp=stamp;if(mode!=='game'||!game)return;if(!pausedByVisibility&&!$('modal').open&&!$('authDialog').open){const kx=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0),ky=(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0);game.step(dt,{x:joystickPointer!==null?input.x:kx,y:joystickPointer!==null?input.y:ky,attack:input.attack||autoAttack||keys.has(' ')||keys.has('j')});}renderer.draw(game,stamp/1000);hudClock+=dt;if(hudClock>.12){updateHUD();hudClock=0;}}
 setInterval(()=>{if(mode==='game')saveNow(true);},20000);
-async function init(){save=readLocal('shanhai-v1:guest')||createSave();accountText();$('enterWorld').disabled=false;$('accountBtn').disabled=false;$('titleProgress').textContent+=' · 素材加载中';requestAnimationFrame(frame);const assetPromise=loadAssets(assets);try{if(location.protocol!=='file:'){const r=await Promise.race([fetch('/api/me'),new Promise((_,rej)=>setTimeout(()=>rej(Error('probe timeout')),3000))]);if(r.ok){apiAvailable=true;const data=await r.json();loadAccount(data);accountText();}}}catch{}await assetPromise.catch(()=>null);accountText();if(mode==='select')renderSelection();else if(mode==='game'&&game)portrait($('hudFace'),game.def,assets);}
+async function init(){save=readLocal('shanhai-v1:guest')||createSave();accountText();$('enterWorld').disabled=false;$('accountBtn').disabled=false;$('titleProgress').textContent+=' · 素材加载中';requestAnimationFrame(frame);const assetPromise=loadAssets(assets);try{if(location.protocol!=='file:'){try{const data=await api('me');apiAvailable=true;loadAccount(data);accountText();}catch{apiAvailable=true;}}}catch{}await assetPromise.catch(()=>null);accountText();if(mode==='select')renderSelection();else if(mode==='game'&&game)portrait($('hudFace'),game.def,assets);}
 window.__rpg={get game(){return game;},get save(){return save;},get user(){return user;},get input(){return input;}};
 init().catch(e=>toast(`加载失败：${e.message}`));
