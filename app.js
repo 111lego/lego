@@ -1,8 +1,8 @@
-import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=16';
-import {Game,createSave,validateSave} from './engine.js?v=16';
-import {loadAssets,portrait,atlas,Renderer,drawMap} from './render.js?v=16';
-import {chooseProgress} from './sync.js?v=16';
-import {buildRows,renderBoard} from './leaderboard.js?v=16';
+import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=17';
+import {Game,createSave,validateSave} from './engine.js?v=17';
+import {loadAssets,portrait,atlas,Renderer,drawMap} from './render.js?v=17';
+import {chooseProgress} from './sync.js?v=17';
+import {buildRows,renderBoard} from './leaderboard.js?v=17';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const input={x:0,y:0,attack:false},keys=new Set();let game=null,assets={},renderer,mode='title',save=createSave(),user=null,revision=0,selected=0,authMode='login',saving=null,saveAgain=false,cloudBlocked=false,lastStamp=0,hudClock=0,autoAttack=false,pausedByVisibility=false,goal=null,audio=null,joystickPointer=null;
 const cacheKey=()=>`shanhai-v1:${user?.id||'guest'}`;

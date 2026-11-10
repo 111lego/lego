@@ -1,5 +1,5 @@
-import {HEROES,ZONES,WORLD,QCOLORS,hash,zoneAt,dist,clamp} from './data.js?v=16';
-export async function loadAssets(target){const assets=target||{};await Promise.all([...HEROES.map(h=>[h.photo,h.photo]),['beasts','beasts.webp'],['scenery','scenery.webp']].map(([key,file])=>new Promise(resolve=>{const img=new Image();let settled=false;const done=()=>{if(settled)return;settled=true;resolve();};img.onload=()=>{assets[key]=img;done();};img.onerror=()=>{img.onerror=null;setTimeout(()=>{img.src=`assets/${file}?retry=${Date.now()}`;setTimeout(done,15000);},600);};setTimeout(done,15000);img.src=window.__OFFLINE_ASSETS?.[file]||`assets/${file}?v=16`;})));return assets;}
+import {HEROES,ZONES,WORLD,QCOLORS,hash,zoneAt,dist,clamp} from './data.js?v=17';
+export async function loadAssets(target){const assets=target||{};await Promise.all([...HEROES.map(h=>[h.photo,h.photo]),['beasts','beasts.webp'],['scenery','scenery.webp']].map(([key,file])=>new Promise(resolve=>{const img=new Image();let settled=false;const done=()=>{if(settled)return;settled=true;resolve();};img.onload=()=>{assets[key]=img;done();};img.onerror=()=>{img.onerror=null;setTimeout(()=>{img.src=`assets/${file}?retry=${Date.now()}`;setTimeout(done,15000);},600);};setTimeout(done,15000);img.src=window.__OFFLINE_ASSETS?.[file]||`assets/${file}?v=17`;})));return assets;}
 export function portrait(canvas,hero,assets){const ctx=canvas.getContext('2d'),img=assets[hero.photo];ctx.clearRect(0,0,canvas.width,canvas.height);if(!img)return;const [x,y,w,h]=hero.crop;ctx.drawImage(img,x,y,w,h,0,0,canvas.width,canvas.height);}
 export function atlas(ctx,img,index,cols,rows,x,y,w,h){if(!img||!img.complete||!img.naturalWidth)return false;const sw=img.naturalWidth/cols,sh=img.naturalHeight/rows;ctx.drawImage(img,(index%cols)*sw+1,Math.floor(index/cols)*sh+1,sw-2,sh-2,x-w/2,y-h,w,h);return true;}
 export function drawMap(canvas,game,full=false){const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);c.fillStyle='#101d18';c.fillRect(0,0,w,h);for(const z of ZONES){const x=z.x/WORLD.w*w,y=z.y/WORLD.h*h,zw=4096/WORLD.w*w,zh=4096/WORLD.h*h;c.fillStyle=game.save.discovered[z.id]?z.color:'#26312b';c.fillRect(x+1,y+1,zw-2,zh-2);c.strokeStyle='#8b8b603b';c.lineWidth=full?2:1;c.beginPath();c.moveTo(x,y+zh/2);c.lineTo(x+zw,y+zh/2);c.moveTo(x+zw*.18,y);c.lineTo(x+zw*.18,y+zh);c.stroke();if(full){c.fillStyle=game.save.discovered[z.id]?'#e6d2a3':'#84907e';c.font='15px serif';c.textAlign='center';c.fillText(z.name,x+zw/2,y+zh*.3);c.font='10px sans-serif';c.fillStyle='#b2bba2';c.fillText(`Lv.${z.min}–${z.max}`,x+zw/2,y+zh*.74);}if(game.save.discovered[z.id]){c.fillStyle='#cfb57b';c.fillRect(z.camp[0]/WORLD.w*w-2,z.camp[1]/WORLD.h*h-2,4,4);}if(full){c.fillStyle=game.save.bosses[z.id]?'#b9a267':'#ad7161';c.beginPath();c.arc(z.boss[0]/WORLD.w*w,z.boss[1]/WORLD.h*h,4,0,Math.PI*2);c.fill();}}
@@ -29,7 +29,8 @@ export class Renderer{
   const u=Math.min(1,a.t/a.dur);
   if(a.kind==='attack'){
     const k=Math.sin(u*Math.PI);
-    const cy=-72*s,px=8*s,r0=36*s,r1=90*s,from=-1.3,span=2.15,lead=from+span*u;
+    // 横扫：等距视角下的水平挥砍投影是扁椭圆，所以把整段特效压扁 .42 后按角度扫
+    const cy=-72*s,px=8*s,r0=36*s,r1=90*s,flat=.42,lead=Math.PI*(1-u);
     const wedge=(a0,a1,alpha,tint)=>{
       ctx.globalAlpha=alpha;
       const gw=ctx.createRadialGradient(px,cy,r0,px,cy,r1);
@@ -40,14 +41,15 @@ export class Renderer{
       ctx.beginPath();ctx.arc(px,cy,r1,a0,a1);ctx.arc(px,cy,r0*.82,a1,a0,true);ctx.closePath();ctx.fill();
     };
     ctx.save();ctx.globalCompositeOperation='lighter';
-    wedge(lead-1.2,lead,.45*(1-u*.45));                 // long faint trail
-    wedge(lead-.58,lead,.55*(1-u*.3),true);             // hot inner trail
+    ctx.translate(px,cy);ctx.scale(1,flat);ctx.translate(-px,-cy);
+    wedge(lead,lead+1.15,.45*(1-u*.45));                // long faint trail
+    wedge(lead,lead+.58,.55*(1-u*.3),true);             // hot inner trail
     ctx.globalAlpha=1;ctx.strokeStyle='#fffdf4';ctx.lineWidth=9*s;ctx.lineCap='round';
     ctx.shadowColor=col;ctx.shadowBlur=22;
-    ctx.beginPath();ctx.arc(px,cy,r1*.95,lead-.3,lead);ctx.stroke();   // cutting edge
+    ctx.beginPath();ctx.arc(px,cy,r1*.95,lead,lead+.3);ctx.stroke();   // cutting edge
     // 手臂 + 刀身：沿当前挥砍角度从肩部伸出，让"手"真的在动
     ctx.save();
-    ctx.translate(px,cy);ctx.rotate(lead);
+    ctx.translate(px,cy);ctx.rotate(lead+Math.PI/2);
     ctx.shadowBlur=12;ctx.shadowColor=col;
     ctx.lineCap='round';
     ctx.globalAlpha=.95*(1-u*.35);
@@ -59,7 +61,7 @@ export class Renderer{
     ctx.beginPath();ctx.moveTo(r1*.84,-2.4*s);ctx.lineTo(r1*1.26,-2.4*s);ctx.stroke();
     ctx.restore();
     ctx.globalAlpha=.85*(1-u);ctx.strokeStyle=col;ctx.lineWidth=4*s;ctx.shadowBlur=8;
-    ctx.beginPath();ctx.arc(px,cy,r1*.62,lead-.9,lead);ctx.stroke();   // weapon glow
+    ctx.beginPath();ctx.arc(px,cy,r1*.62,lead,lead+.9);ctx.stroke();   // weapon glow
     ctx.restore();
     return{rot:k*-.17,sx:1+k*.05,sy:1-k*.06};
   }
