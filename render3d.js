@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=14';
-import { ZONES, dist } from './data.js?v=14';
-import { Renderer } from './render.js?v=14';
+import * as THREE from './three.module.min.js?v=15';
+import { ZONES, dist } from './data.js?v=15';
+import { Renderer } from './render.js?v=15';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
@@ -364,6 +364,7 @@ export class Renderer3D {
     const gy = heightAt(entity.x, entity.y, zone);
     const bob = entity.bob ? Math.sin(time * 11) * 2.5 : 0;
     a.sprite.position.set(entity.x, gy + bob, entity.y);
+    if (a.sprite.material.rotation !== (entity.lean || 0)) a.sprite.material.rotation = entity.lean || 0;
     // shadow slides away from the sun and stretches as the body gets taller
     const reach = h * 0.34;
     a.shadow.position.set(entity.x - SUN_DIR.x * reach, gy + 1.5, entity.y - SUN_DIR.z * reach);
@@ -579,6 +580,7 @@ export class Renderer3D {
       this.heroTex = heroTexture(heroDef, this.assets);
       this.heroKey = heroDef.id;
     }
+    h.lean = (game.isMoving && game.facing) ? game.facing.x * 0.13 : 0;
     if (this.heroTex) this._syncActor(h, this.heroTex, HERO_H, HERO_H, zone, time);
     keep.add(h);
 
