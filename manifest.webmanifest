@@ -1,0 +1,30 @@
+{
+  "name": "山海五侠 · 大荒行纪",
+  "short_name": "山海五侠",
+  "description": "五位故人，共赴大荒。写实国风 2.5D 大世界 RPG。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0b1413",
+  "theme_color": "#131c1b",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

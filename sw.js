@@ -1,5 +1,5 @@
-const V='v23';
-const CORE=['./','./index.html','./3d.html','./style.css','./app.js','./data.js','./engine.js','./render.js','./sync.js','./leaderboard.js',
+const V='v24';
+const CORE=['./','./index.html','./3d.html','./style.css','./app.js','./data.js','./engine.js','./render.js','./sync.js','./leaderboard.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png',
 './assets/beasts.webp','./assets/scenery.webp','./assets/title-world.webp','./assets/zhangke.webp','./assets/quanquan.webp','./assets/dongdong.webp','./assets/weiwei.webp','./assets/qiangzi.webp'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).catch(()=>{}).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
