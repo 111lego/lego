@@ -1,9 +1,9 @@
-import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=24';
-import {Game,createSave,validateSave} from './engine.js?v=24';
-import {loadAssets,portrait,atlas,drawMap} from './render.js?v=24';
-import {makeRenderer} from './render3d.js?v=24';
-import {chooseProgress} from './sync.js?v=24';
-import {buildRows,renderBoard} from './leaderboard.js?v=24';
+import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=25';
+import {Game,createSave,validateSave} from './engine.js?v=25';
+import {loadAssets,portrait,atlas,drawMap} from './render.js?v=25';
+import {makeRenderer} from './render3d.js?v=25';
+import {chooseProgress} from './sync.js?v=25';
+import {buildRows,renderBoard} from './leaderboard.js?v=25';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const input={x:0,y:0,attack:false},keys=new Set();let game=null,assets={},renderer,mode='title',save=createSave(),user=null,revision=0,selected=0,authMode='login',saving=null,saveAgain=false,cloudBlocked=false,lastStamp=0,hudClock=0,autoAttack=false,pausedByVisibility=false,goal=null,audio=null,joystickPointer=null;
 const cacheKey=()=>`shanhai-v1:${user?.id||'guest'}`;
@@ -133,4 +133,4 @@ async function init(){save=readLocal('shanhai-v1:guest')||createSave();accountTe
 window.__rpg={get game(){return game;},get save(){return save;},get user(){return user;},get input(){return input;}};
 init().catch(e=>toast(`加载失败：${e.message}`));
 
-window.addEventListener('load',()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})});
+window.addEventListener('load',()=>{if(!('serviceWorker' in navigator))return;navigator.serviceWorker.register('sw.js').catch(()=>{});navigator.serviceWorker.ready.then(()=>{const ch=new MessageChannel();ch.port1.onmessage=ev=>{const el=document.getElementById('titleProgress');if(el&&ev.data&&ev.data.count)el.textContent+=' · 离线缓存 '+ev.data.count+' 项';};if(navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage('status',[ch.port2]);}).catch(()=>{});});
