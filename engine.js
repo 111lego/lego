@@ -1,4 +1,4 @@
-import {HEROES,ZONES,SPECIES,WORLD,SLOTS,QUALITY,clamp,dist,random,hash,zoneAt,xpNeed} from './data.js?v=25';
+import {HEROES,ZONES,SPECIES,WORLD,SLOTS,QUALITY,clamp,dist,random,hash,zoneAt,xpNeed} from './data.js?v=26';
 const uid=()=>globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const int=(n,a,b)=>Number.isInteger(n)&&n>=a&&n<=b;
 const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
