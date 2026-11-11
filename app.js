@@ -1,8 +1,8 @@
-import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=22';
-import {Game,createSave,validateSave} from './engine.js?v=22';
-import {loadAssets,portrait,atlas,Renderer,drawMap} from './render.js?v=22';
-import {chooseProgress} from './sync.js?v=22';
-import {buildRows,renderBoard} from './leaderboard.js?v=22';
+import {HEROES,ZONES,SPECIES,QUALITY,QCOLORS,SLOTS,WORLD,xpNeed,dist,clamp} from './data.js?v=23';
+import {Game,createSave,validateSave} from './engine.js?v=23';
+import {loadAssets,portrait,atlas,Renderer,drawMap} from './render.js?v=23';
+import {chooseProgress} from './sync.js?v=23';
+import {buildRows,renderBoard} from './leaderboard.js?v=23';
 const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const input={x:0,y:0,attack:false},keys=new Set();let game=null,assets={},renderer,mode='title',save=createSave(),user=null,revision=0,selected=0,authMode='login',saving=null,saveAgain=false,cloudBlocked=false,lastStamp=0,hudClock=0,autoAttack=false,pausedByVisibility=false,goal=null,audio=null,joystickPointer=null;
 const cacheKey=()=>`shanhai-v1:${user?.id||'guest'}`;
@@ -131,3 +131,5 @@ setInterval(()=>{if(mode==='game')saveNow(true);},20000);
 async function init(){save=readLocal('shanhai-v1:guest')||createSave();accountText();$('enterWorld').disabled=false;$('accountBtn').disabled=false;$('titleProgress').textContent+=' · 素材加载中';const prog=setInterval(()=>{$('titleProgress').textContent='素材加载中 '+Object.keys(assets).length+'/8';},250);requestAnimationFrame(frame);const assetPromise=loadAssets(assets);try{if(location.protocol!=='file:'){try{const data=await api('me');apiAvailable=true;loadAccount(data);accountText();}catch{apiAvailable=true;}}}catch{}await assetPromise.catch(()=>null);clearInterval(prog);accountText();if(mode==='select')renderSelection();else if(mode==='game'&&game)portrait($('hudFace'),game.def,assets);}
 window.__rpg={get game(){return game;},get save(){return save;},get user(){return user;},get input(){return input;}};
 init().catch(e=>toast(`加载失败：${e.message}`));
+
+window.addEventListener('load',()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})});
