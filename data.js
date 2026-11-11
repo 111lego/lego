@@ -1,4 +1,4 @@
-export const WORLD = {w:16384,h:8192,zone:4096,tile:64};
+export const WORLD = {w:16384,h:12288,zone:4096,tile:64};
 const skill=(name,icon,kind,cost,cd,power,range,description)=>({name,icon,kind,cost,cd,power,range,description});
 export const HEROES = [
  {id:0,name:'张科',title:'破军刀客',role:'近战 · 突进 · 群攻',color:'#d8a15b',hp:360,mp:150,atk:32,def:12,speed:245,range:120,weapon:'长刀',photo:'zhangke.webp',crop:[0,0,421,480],quote:'一刀破阵，踏尽山海。',skills:[skill('破阵斩','斩','cone',15,3,2.1,180,'挥刀斩击前方异兽，造成210%伤害。'),skill('追风突袭','突','dash',22,7,2.4,320,'向目标突进，并造成240%伤害。'),skill('旋风刀','旋','spin',30,10,3.2,215,'刀风席卷周围，造成320%范围伤害。'),skill('战意','战','fury',25,18,0,0,'8秒内攻击加速，并恢复造成伤害的生命。'),skill('天裂斩','裂','nova',48,25,6,330,'刀气撕裂大地，造成600%范围伤害。')]},
@@ -16,7 +16,8 @@ zone(3,'赤炎山','焦土余烬 · 毕方焚天',22,32,12288,0,'#514036','#d695
 zone(4,'北冥雪原','风雪无垠 · 冰龙蛰伏',30,40,0,4096,'#606f72','#c4dce0','烛阴·寒渊',[8,9]),
 zone(5,'雷泽古墟','残碑雷鸣 · 夔牛震世',38,48,4096,4096,'#3e4254','#b7b1d5','夔牛·震世',[10,11]),
 zone(6,'昆仑天阶','玉阶通天 · 神兽镇山',46,56,8192,4096,'#545443','#d0bf84','应龙·昆仑',[12,13]),
-zone(7,'归墟禁地','万象归寂 · 饕餮噬天',54,60,12288,4096,'#302e3c','#af91a7','饕餮·归墟',[14,15])];
+{...zone(8,'天裂之隙','世界首领 · 满级挑战',58,60,0,8192,'#2b1c26','#c07a92','裂界·太初',[16,23]),world:true},
+ zone(7,'归墟禁地','万象归寂 · 饕餮噬天',54,60,12288,4096,'#302e3c','#af91a7','饕餮·归墟',[14,15])];
 export const SPECIES=['青丘灵狐','山狰','狌狌','鹿蜀','泽蛇','蛊雕','毕方','炎獒','北冥狼','雪犀','雷夔','雷鹰','金角兽','青羽玄鸟','影兽','玄鳞蛇'];
 export const QUALITY=['凡品','精良','稀有','史诗','传说'];
 export const QCOLORS=['#b4b7ac','#95b69b','#95b8da','#b39bc7','#d6ac63'];
@@ -26,4 +27,4 @@ export const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export function random(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
 export function hash(x,y){let n=Math.imul(x,374761393)^Math.imul(y,668265263);n=Math.imul(n^(n>>>13),1274126177);return((n^(n>>>16))>>>0)/4294967295;}
 export const zoneAt=(x,y)=>ZONES[clamp(Math.floor(y/4096),0,1)*4+clamp(Math.floor(x/4096),0,3)];
-export const xpNeed=level=>Math.floor(80*Math.pow(level,1.46));
+export const xpNeed=level=>Math.floor(80*Math.pow(level,1.46)*(1+2*Math.pow(level/60,2)));
