@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=21';
-import { ZONES, dist } from './data.js?v=21';
-import { Renderer } from './render.js?v=21';
+import * as THREE from './three.module.min.js?v=22';
+import { ZONES, dist } from './data.js?v=22';
+import { Renderer } from './render.js?v=22';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
@@ -163,7 +163,7 @@ export class Renderer3D {
     this.propCells = [5, 5, 5, 6, 7, 8, 14];   // pine, dead tree, rocks, bush
     this.landmarks = [
       [11, 0, -170, 1.15],
-      [10, -260, -150, 1.6],   // pavilion beside the camp
+   // pavilion beside the camp
       [10, 110, 40, 0.75],   // spirit stone
       [9, -260, 240, 0.9],   // gate
       [12, 150, 150, 0.6],   // cauldron
@@ -320,6 +320,18 @@ export class Renderer3D {
     this.scene.fog = new THREE.Fog(sky, 520, 2400);
     this.scene.background = sky;
 
+    // portal: two additive rings + glow, so it reads as a gateway in 3D
+    if (!this.portal) {
+      const grp = new THREE.Group();
+      const ring = (r, t, col, op) => new THREE.Mesh(new THREE.TorusGeometry(r, t, 8, 28),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+      grp.add(ring(58, 7, 0x9b5fd0, 0.9), ring(40, 4, 0xe8c8ff, 0.75));
+      const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: 0xc79bff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+      gl.scale.set(230, 230, 1);
+      grp.add(gl);
+      this.portal = grp; this.scene.add(grp);
+    }
+    this.portal.position.set(zone.camp[0] - 260, heightAt(zone.camp[0] - 260, zone.camp[1] - 150, zone) + 95, zone.camp[1] - 150);
     // landmarks around the camp
     for (const child of [...this.propGroup.children]) {
       this.propGroup.remove(child);
@@ -678,6 +690,7 @@ this._recycle(keep);
     this.sun.target.position.set(h.x, gy, h.y);
     this.sun.target.updateMatrixWorld();
 
+    if (this.portal) { this.portal.rotation.z = time * 0.8; this.portal.children[2].material.opacity = 0.55 + 0.3 * Math.sin(time * 3); }
     this.renderer.render(this.scene, this.camera);
   }
 }
