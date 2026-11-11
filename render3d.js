@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=19';
-import { ZONES, dist } from './data.js?v=19';
-import { Renderer } from './render.js?v=19';
+import * as THREE from './three.module.min.js?v=20';
+import { ZONES, dist } from './data.js?v=20';
+import { Renderer } from './render.js?v=20';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
@@ -162,7 +162,8 @@ export class Renderer3D {
     this.actors = new Map();     // entity -> {sprite, shadow}
     this.propCells = [5, 5, 5, 6, 7, 8, 14];   // pine, dead tree, rocks, bush
     this.landmarks = [
-      [11, 0, -170, 1.15],   // pavilion beside the camp
+      [11, 0, -170, 1.15],
+      [10, -260, -150, 1.6],   // pavilion beside the camp
       [10, 110, 40, 0.75],   // spirit stone
       [9, -260, 240, 0.9],   // gate
       [12, 150, 150, 0.6],   // cauldron
