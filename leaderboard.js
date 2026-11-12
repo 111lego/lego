@@ -3,8 +3,8 @@
 // 账号存在本机浏览器里，所以这张榜是「这台设备上的所有账号 + 当前角色」按战力排序。
 // 战力刻意用引擎自己的 stats 计算（等级 + 装备 + 强化），不另写一套公式，避免和战斗数值脱节。
 // 跨设备上线需要服务器聚合，届时把 buildRows 的数据源换成接口返回即可，UI 不用动。
-import {QCOLORS} from './data.js?v=32';
-import {Game, createSave, validateSave} from './engine.js?v=32';
+import {QCOLORS} from './data.js?v=33';
+import {Game, createSave, validateSave} from './engine.js?v=33';
 
 // 战力 = 生存(0.5) + 灵力(0.35) + 攻防和×8 + 暴击×1200 + 等级×60
 export function powerOf(stats, level) {
@@ -83,7 +83,7 @@ export function renderBoard(rows, meName) {
   const tip = mine
     ? `<p class="muted">我的战力 <b class="gold">${mine.power.toLocaleString('zh-CN')}</b> · ${esc0(mine.hero)} Lv.${mine.level}</p>`
     : '<p class="muted">登录账号后，你的成绩会出现在这张榜上。</p>';
-  const note = `<p class="fine">战力 = 生命×0.5 + 灵力×0.35 + 攻防和×8 + 暴击×1200 + 等级×60，按引擎实际属性（含装备强化）计算。<br>
+  const note = `<p class="fine"><b class="gold">这张表只统计本机浏览器里的账号，不是全服排名</b>，也没有防作弊校验，数值仅供参考。<br>战力 = 生命×0.5 + 灵力×0.35 + 攻防和×8 + 暴击×1200 + 等级×60，按引擎实际属性（含装备强化）计算。<br>
 账号保存在本机浏览器，所以这是这台设备上的排行；跨设备排行榜需要服务器汇总。</p>`;
   return `${style}${tip}<div style="margin-top:8px">${head}${body || '<p class="muted">还没有成绩，先开一局吧。</p>'}</div>${note}`;
 }
