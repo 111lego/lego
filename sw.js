@@ -1,4 +1,4 @@
-const V='v34';
+const V='v35';
 const CORE=['./','./index.html','./3d.html','./style.css','./app.js','./data.js','./engine.js','./render.js','./sync.js','./leaderboard.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png',
 './assets/beasts.webp','./assets/scenery.webp','./assets/title-world.webp','./assets/zhangke.webp','./assets/quanquan.webp','./assets/dongdong.webp','./assets/weiwei.webp','./assets/qiangzi.webp'];
 // 逐个文件缓存：任何一个 404 都不会让整批失败（addAll 的坑）
