@@ -3,8 +3,8 @@
 // 账号存在本机浏览器里，所以这张榜是「这台设备上的所有账号 + 当前角色」按战力排序。
 // 战力刻意用引擎自己的 stats 计算（等级 + 装备 + 强化），不另写一套公式，避免和战斗数值脱节。
 // 跨设备上线需要服务器聚合，届时把 buildRows 的数据源换成接口返回即可，UI 不用动。
-import {QCOLORS} from './data.js?v=31';
-import {Game, createSave, validateSave} from './engine.js?v=31';
+import {QCOLORS} from './data.js?v=32';
+import {Game, createSave, validateSave} from './engine.js?v=32';
 
 // 战力 = 生存(0.5) + 灵力(0.35) + 攻防和×8 + 暴击×1200 + 等级×60
 export function powerOf(stats, level) {
