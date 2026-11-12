@@ -10,9 +10,9 @@
 //   beasts.webp  6x4 : 24 creature cells
 //
 // Camera: drag to orbit, wheel / pinch to zoom.
-import * as THREE from './three.module.min.js?v=29';
-import { ZONES, dist } from './data.js?v=29';
-import { Renderer } from './render.js?v=29';
+import * as THREE from './three.module.min.js?v=30';
+import { ZONES, dist } from './data.js?v=30';
+import { Renderer } from './render.js?v=30';
 
 const HERO_H = 175;            // hero billboard height, same as the 2D actor
 const ZONE = 4096;             // one zone of gameplay is 4096x4096 world units
